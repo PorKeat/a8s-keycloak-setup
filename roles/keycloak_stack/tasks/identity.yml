@@ -84,6 +84,12 @@
   loop_control:
     loop_var: keycloak_realm_user
 
+- name: Ensure the configured realm identity providers exist
+  ansible.builtin.include_tasks: identity_provider.yml
+  loop: "{{ keycloak_identity_providers | default([]) }}"
+  loop_control:
+    loop_var: keycloak_identity_provider
+
 - name: Ensure the configured realm clients exist
   ansible.builtin.include_tasks: identity_client.yml
   loop: "{{ keycloak_clients }}"

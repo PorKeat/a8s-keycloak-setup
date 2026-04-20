@@ -1,0 +1,103 @@
+---
+- name: Build the desired Keycloak identity provider config map
+  ansible.builtin.set_fact:
+    keycloak_identity_provider_config: >-
+      {{
+        {}
+        | combine({'clientId': keycloak_identity_provider.client_id} if (keycloak_identity_provider.client_id | default('') | length > 0) else {})
+        | combine({'clientSecret': keycloak_identity_provider.client_secret} if (keycloak_identity_provider.client_secret | default('') | length > 0) else {})
+        | combine({'defaultScope': keycloak_identity_provider.default_scope} if (keycloak_identity_provider.default_scope | default('') | length > 0) else {})
+        | combine({'guiOrder': (keycloak_identity_provider.gui_order | string)} if (keycloak_identity_provider.gui_order is defined and (keycloak_identity_provider.gui_order | string | length > 0)) else {})
+        | combine({'baseUrl': keycloak_identity_provider.base_url} if (keycloak_identity_provider.base_url | default('') | length > 0) else {})
+        | combine({'apiUrl': keycloak_identity_provider.api_url} if (keycloak_identity_provider.api_url | default('') | length > 0) else {})
+        | combine({'emailUrl': keycloak_identity_provider.email_url} if (keycloak_identity_provider.email_url | default('') | length > 0) else {})
+        | combine({'prompt': keycloak_identity_provider.prompt} if (keycloak_identity_provider.prompt | default('') | length > 0) else {})
+        | combine({'hostedDomain': keycloak_identity_provider.hosted_domain} if (keycloak_identity_provider.hosted_domain | default('') | length > 0) else {})
+        | combine({'offlineAccess': ((keycloak_identity_provider.offline_access | default(false) | bool) | ternary('true', 'false'))} if (keycloak_identity_provider.offline_access is defined) else {})
+        | combine({'userIp': ((keycloak_identity_provider.user_ip | default(false) | bool) | ternary('true', 'false'))} if (keycloak_identity_provider.user_ip is defined) else {})
+        | combine({'acceptsPromptNoneForwardFromClient': ((keycloak_identity_provider.accepts_prompt_none_forward_from_client | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'disableUserInfo': ((keycloak_identity_provider.disable_user_info | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'hideOnLoginPage': ((keycloak_identity_provider.hide_on_login | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'syncMode': keycloak_identity_provider.sync_mode} if (keycloak_identity_provider.sync_mode | default('') | length > 0) else {})
+        | combine({'caseSensitiveOriginalUsername': ((keycloak_identity_provider.case_sensitive_original_username | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'filteredByClaims': ((keycloak_identity_provider.verify_essential_claim | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'claimFilterName': keycloak_identity_provider.claim_filter_name} if (keycloak_identity_provider.claim_filter_name | default('') | length > 0) else {})
+        | combine({'claimFilterValue': keycloak_identity_provider.claim_filter_value} if (keycloak_identity_provider.claim_filter_value | default('') | length > 0) else {})
+        | combine(keycloak_identity_provider.extra_config | default({}))
+      }}
+  no_log: "{{ not (keycloak_debug_identity_providers | default(false) | bool) }}"
+
+- name: Build the desired Keycloak identity provider payload
+  ansible.builtin.set_fact:
+    keycloak_identity_provider_payload: >-
+      {{
+        {
+          'alias': keycloak_identity_provider.alias,
+          'providerId': keycloak_identity_provider.provider_id,
+          'enabled': keycloak_identity_provider.enabled | default(true) | bool,
+          'displayName': keycloak_identity_provider.display_name | default(keycloak_identity_provider.alias),
+          'trustEmail': keycloak_identity_provider.trust_email | default(false) | bool,
+          'storeToken': keycloak_identity_provider.store_token | default(false) | bool,
+          'addReadTokenRoleOnCreate': keycloak_identity_provider.add_read_token_role_on_create | default(false) | bool,
+          'authenticateByDefault': keycloak_identity_provider.authenticate_by_default | default(false) | bool,
+          'linkOnly': keycloak_identity_provider.link_only | default(false) | bool,
+          'hideOnLogin': keycloak_identity_provider.hide_on_login | default(false) | bool,
+          'updateProfileFirstLoginMode': keycloak_identity_provider.update_profile_first_login_mode | default('on'),
+          'config': keycloak_identity_provider_config
+        }
+        | combine(
+            {'firstBrokerLoginFlowAlias': keycloak_identity_provider.first_broker_login_flow_alias}
+            if (keycloak_identity_provider.first_broker_login_flow_alias | default('') | length > 0)
+            else {}
+          )
+        | combine(
+            {'postBrokerLoginFlowAlias': keycloak_identity_provider.post_broker_login_flow_alias}
+            if (keycloak_identity_provider.post_broker_login_flow_alias | default('') | length > 0)
+            else {}
+          )
+      }}
+  no_log: "{{ not (keycloak_debug_identity_providers | default(false) | bool) }}"
+
+- name: Check whether the Keycloak identity provider already exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/identity-provider/instances/{{ keycloak_identity_provider.alias }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code:
+      - 200
+      - 404
+    use_proxy: false
+  register: keycloak_existing_identity_provider
+  no_log: "{{ not (keycloak_debug_identity_providers | default(false) | bool) }}"
+
+- name: Create the Keycloak identity provider when missing
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/identity-provider/instances"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body: "{{ keycloak_identity_provider_payload }}"
+    status_code:
+      - 200
+      - 201
+      - 409
+    use_proxy: false
+  when: keycloak_existing_identity_provider.status == 404
+  no_log: "{{ not (keycloak_debug_identity_providers | default(false) | bool) }}"
+
+- name: Update the Keycloak identity provider configuration
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/identity-provider/instances/{{ keycloak_identity_provider.alias }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body: "{{ keycloak_identity_provider_payload }}"
+    status_code:
+      - 200
+      - 204
+    use_proxy: false
+  no_log: "{{ not (keycloak_debug_identity_providers | default(false) | bool) }}"

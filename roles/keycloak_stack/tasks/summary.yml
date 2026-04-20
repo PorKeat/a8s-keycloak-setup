@@ -7,6 +7,7 @@
       - "Realm: {{ keycloak_realm_name }}"
       - "Login theme: {{ keycloak_realm_login_theme_effective if (keycloak_realm_login_theme_effective | length > 0) else 'default' }}"
       - "Realm users: {{ keycloak_realm_users | default([]) | map(attribute='username') | list | join(', ') }}"
+      - "Identity providers: {{ keycloak_identity_providers | default([]) | map(attribute='alias') | list | join(', ') }}"
       - "Clients: {{ keycloak_clients | map(attribute='client_id') | list | join(', ') }}"
       - "Provider JAR: {{ keycloak_provider_jar_effective if (keycloak_provider_jar_effective | length > 0) else 'none' }}"
       - "Generated admin password file: {{ generated_secret_dir ~ '/' ~ inventory_hostname ~ '.keycloak_admin_password' if (keycloak_admin_password is not defined or keycloak_admin_password | length == 0) else 'provided via keycloak_admin_password' }}"

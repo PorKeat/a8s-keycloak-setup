@@ -26,6 +26,7 @@ This structure is organized around two files:
         │   ├── destroy.yml
         │   ├── identity.yml
         │   ├── identity_client.yml
+        │   ├── identity_provider.yml
         │   ├── identity_user.yml
         │   ├── identity_user_client_role.yml
         │   ├── nginx.yml
@@ -96,9 +97,10 @@ By default the deploy now also ensures:
 - realm: `a8s`
 - login theme: `keycloakify-starter`
 - realm user: `a8s-admin` with a configurable password
+- identity providers: `github`, `gitlab`, `google`
 - clients: `a8s-frontend`, `a8s-frontend-local`
 
-Those values live in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml), including the realm login theme, realm users, passwords, role mappings, and the default redirect URIs and web origins for each client.
+Those values live in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml), including the realm login theme, identity provider settings, realm users, passwords, role mappings, and the default redirect URIs and web origins for each client.
 
 ## Notes
 
@@ -106,6 +108,7 @@ Those values live in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docke
 - Generated passwords are stored in `./.ansible/generated/` when you leave them empty in `group_vars/all.yml`.
 - Local provider/theme directories are supported if you create `./keycloak/providers/` or `./keycloak/themes/`.
 - This repo already contains a provider JAR at `provider/keycloak-theme-for-kc-all-other-versions.jar`, and the playbook now uses it by default as the `keycloakify-starter` login theme.
+- The social identity provider client secrets in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml) are placeholders until you replace them with the real GitHub, GitLab, and Google secrets.
 - This project does not use a service-account key file. If you later add Google Cloud automation, use ADC instead.
 - If SSH still says `Permission denied (publickey)`, the server likely does not have the matching public key in `~/.ssh/authorized_keys` for `target_host_user`.
 - Destroy behavior is controlled by `keycloak_destroy_remove_volumes`, `keycloak_destroy_remove_project_dir`, `keycloak_destroy_remove_tls_assets`, and `keycloak_destroy_restore_default_nginx_site` in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml).

@@ -24,6 +24,58 @@ keycloak_realm_name: a8s
 keycloak_realm_display_name: A8S
 keycloak_realm_ssl_required: "{{ 'external' if (keycloak_domain | length > 0) else 'none' }}"
 keycloak_realm_login_theme: keycloakify-starter
+keycloak_debug_identity_providers: false
+keycloak_identity_providers:
+  - alias: github
+    provider_id: github
+    display_name: Github
+    enabled: true
+    client_id: Ov23li0qvURMpiCMoVmh
+    client_secret: REPLACE_ME_GITHUB_CLIENT_SECRET
+    store_token: true
+    accepts_prompt_none_forward_from_client: false
+    disable_user_info: false
+    trust_email: true
+    link_only: false
+    hide_on_login: false
+    verify_essential_claim: false
+    sync_mode: LEGACY
+    case_sensitive_original_username: false
+  - alias: gitlab
+    provider_id: gitlab
+    display_name: Gitlab
+    enabled: true
+    client_id: 17f6c4bd9849af4ea228c8eef5c4da173b2382bfe947732794473ab06f84250d
+    client_secret: REPLACE_ME_GITLAB_CLIENT_SECRET
+    default_scope: "read_user email"
+    store_token: true
+    accepts_prompt_none_forward_from_client: false
+    disable_user_info: false
+    trust_email: true
+    link_only: false
+    hide_on_login: false
+    verify_essential_claim: false
+    sync_mode: IMPORT
+    case_sensitive_original_username: false
+  - alias: google
+    provider_id: google
+    display_name: Google
+    enabled: true
+    client_id: 84196592547-ft20gl99uemj6f68qsuf1a6l92u10m8o.apps.googleusercontent.com
+    client_secret: REPLACE_ME_GOOGLE_CLIENT_SECRET
+    prompt: ""
+    hosted_domain: ""
+    user_ip: false
+    offline_access: false
+    store_token: false
+    accepts_prompt_none_forward_from_client: false
+    disable_user_info: false
+    trust_email: true
+    link_only: false
+    hide_on_login: false
+    verify_essential_claim: false
+    sync_mode: LEGACY
+    case_sensitive_original_username: false
 keycloak_realm_users:
   - username: a8s-admin
     first_name: A8S

@@ -1,0 +1,67 @@
+---
+- name: Look up the Keycloak client for role assignment
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/clients?clientId={{ keycloak_user_client_role_mapping.key | urlencode }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_role_mapping_client_lookup
+
+- name: Resolve the Keycloak client id for role assignment
+  ansible.builtin.set_fact:
+    keycloak_role_mapping_client_id: "{{ (keycloak_role_mapping_client_lookup.json | first).id if (keycloak_role_mapping_client_lookup.json | length > 0) else '' }}"
+
+- name: Ensure the requested client exists before assigning roles
+  ansible.builtin.assert:
+    that:
+      - keycloak_role_mapping_client_id | length > 0
+    fail_msg: "Keycloak client '{{ keycloak_user_client_role_mapping.key }}' was not found in realm '{{ keycloak_realm_name }}'."
+
+- name: Look up the realm user's currently assigned client roles
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/users/{{ keycloak_final_realm_user_id }}/role-mappings/clients/{{ keycloak_role_mapping_client_id }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_assigned_client_roles
+
+- name: Resolve which client roles are still missing
+  ansible.builtin.set_fact:
+    keycloak_missing_client_roles: >-
+      {{
+        keycloak_user_client_role_mapping.value
+        | difference(keycloak_assigned_client_roles.json | map(attribute='name') | list)
+      }}
+
+- name: Look up the missing Keycloak client role representations
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/clients/{{ keycloak_role_mapping_client_id }}/roles/{{ keycloak_user_client_role_name | urlencode }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  loop: "{{ keycloak_missing_client_roles }}"
+  loop_control:
+    loop_var: keycloak_user_client_role_name
+  register: keycloak_missing_client_role_representations
+  when: keycloak_missing_client_roles | length > 0
+
+- name: Assign the missing Keycloak client roles to the realm user
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/users/{{ keycloak_final_realm_user_id }}/role-mappings/clients/{{ keycloak_role_mapping_client_id }}"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body: "{{ keycloak_missing_client_role_representations.results | map(attribute='json') | list }}"
+    status_code: 204
+    use_proxy: false
+  when: keycloak_missing_client_roles | length > 0

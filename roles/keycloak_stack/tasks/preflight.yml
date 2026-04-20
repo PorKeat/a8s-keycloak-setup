@@ -23,6 +23,13 @@
     keycloak_target_host_effective: "{{ ansible_host | default(inventory_hostname) }}"
     keycloak_server_name_effective: "{{ keycloak_domain | default(ansible_host | default(inventory_hostname), true) }}"
     keycloak_enable_tls_effective: "{{ (keycloak_domain | default('', true) | length > 0) and (letsencrypt_email | default('', true) | length > 0) }}"
+    keycloak_provider_jar_effective: >-
+      {{
+        keycloak_provider_jar
+        if (keycloak_provider_jar is defined and keycloak_provider_jar | length > 0)
+        else (keycloak_theme_jar | default('', true))
+      }}
+    keycloak_realm_login_theme_effective: "{{ keycloak_realm_login_theme | default('', true) }}"
 
 - name: Use the provided Postgres password
   ansible.builtin.set_fact:

@@ -73,24 +73,24 @@
   delegate_to: localhost
   become: false
   ansible.builtin.stat:
-    path: "{{ keycloak_theme_jar }}"
-  when: keycloak_theme_jar | length > 0
+    path: "{{ keycloak_provider_jar_effective }}"
+  when: keycloak_provider_jar_effective | length > 0
   register: local_theme_jar
 
 - name: Fail when the requested provider jar does not exist
   ansible.builtin.assert:
     that:
       - local_theme_jar.stat.exists
-    fail_msg: "Local Keycloak provider JAR not found: {{ keycloak_theme_jar }}"
-  when: keycloak_theme_jar | length > 0
+    fail_msg: "Local Keycloak provider JAR not found: {{ keycloak_provider_jar_effective }}"
+  when: keycloak_provider_jar_effective | length > 0
 
 - name: Upload the requested provider jar
   ansible.builtin.copy:
-    src: "{{ keycloak_theme_jar }}"
-    dest: "{{ keycloak_project_dir }}/keycloak/providers/{{ keycloak_theme_jar | basename }}"
+    src: "{{ keycloak_provider_jar_effective }}"
+    dest: "{{ keycloak_project_dir }}/keycloak/providers/{{ keycloak_provider_jar_effective | basename }}"
     mode: "0644"
   when:
-    - keycloak_theme_jar | length > 0
+    - keycloak_provider_jar_effective | length > 0
     - local_theme_jar.stat.exists
   register: uploaded_theme_jar
 

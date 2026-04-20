@@ -4,15 +4,23 @@
 
 - name: Prepare the system
   ansible.builtin.import_tasks: system.yml
+  when: keycloak_stack_state | default('present') == 'present'
 
 - name: Deploy the application stack
   ansible.builtin.import_tasks: deploy.yml
+  when: keycloak_stack_state | default('present') == 'present'
 
 - name: Bootstrap Keycloak identity config
   ansible.builtin.import_tasks: identity.yml
+  when: keycloak_stack_state | default('present') == 'present'
 
 - name: Configure Nginx and TLS
   ansible.builtin.import_tasks: nginx.yml
+  when: keycloak_stack_state | default('present') == 'present'
+
+- name: Destroy the application stack
+  ansible.builtin.import_tasks: destroy.yml
+  when: keycloak_stack_state | default('present') == 'absent'
 
 - name: Print the deployment summary
   ansible.builtin.import_tasks: summary.yml

@@ -1,4 +1,40 @@
 ---
+- name: Build the desired Keycloak client payload
+  ansible.builtin.set_fact:
+    keycloak_client_payload: >-
+      {{
+        {
+          'clientId': keycloak_client.client_id,
+          'name': keycloak_client.name | default(keycloak_client.client_id),
+          'description': keycloak_client.description | default(''),
+          'enabled': keycloak_client.enabled | default(true) | bool,
+          'protocol': 'openid-connect',
+          'alwaysDisplayInConsole': keycloak_client.always_display_in_ui | default(false) | bool,
+          'clientAuthenticatorType': keycloak_client.client_authenticator_type | default('client-secret'),
+          'publicClient': keycloak_client.public_client | default(true) | bool,
+          'standardFlowEnabled': keycloak_client.standard_flow_enabled | default(true) | bool,
+          'implicitFlowEnabled': keycloak_client.implicit_flow_enabled | default(false) | bool,
+          'directAccessGrantsEnabled': keycloak_client.direct_access_grants_enabled | default(false) | bool,
+          'serviceAccountsEnabled': keycloak_client.service_accounts_enabled | default(false) | bool,
+          'authorizationServicesEnabled': keycloak_client.authorization_services_enabled | default(false) | bool,
+          'rootUrl': keycloak_client.root_url | default(''),
+          'baseUrl': keycloak_client.home_url | default(keycloak_client.base_url | default('')),
+          'adminUrl': keycloak_client.admin_url | default(''),
+          'redirectUris': keycloak_client.redirect_uris | default([]),
+          'webOrigins': keycloak_client.web_origins | default([]),
+          'frontchannelLogout': keycloak_client.frontchannel_logout | default(false) | bool,
+          'consentRequired': keycloak_client.consent_required | default(false) | bool,
+          'attributes': {
+            'pkce.code.challenge.method': keycloak_client.pkce_code_challenge_method | default(''),
+            'post.logout.redirect.uris': keycloak_client.post_logout_redirect_uris | default(''),
+            'frontchannel.logout.session.required': ((keycloak_client.frontchannel_logout_session_required | default(false) | bool) | ternary('true', 'false')),
+            'standard.token.exchange.enabled': ((keycloak_client.standard_token_exchange_enabled | default(false) | bool) | ternary('true', 'false')),
+            'oauth2.device.authorization.grant.enabled': ((keycloak_client.oauth2_device_authorization_grant_enabled | default(false) | bool) | ternary('true', 'false')),
+            'oidc.ciba.grant.enabled': ((keycloak_client.oidc_ciba_grant_enabled | default(false) | bool) | ternary('true', 'false'))
+          }
+        }
+      }}
+
 - name: Look up the existing Keycloak client
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/clients?clientId={{ keycloak_client.client_id | urlencode }}"
@@ -21,19 +57,7 @@
     headers:
       Authorization: "Bearer {{ keycloak_admin_access_token }}"
     body_format: json
-    body:
-      clientId: "{{ keycloak_client.client_id }}"
-      name: "{{ keycloak_client.name | default(keycloak_client.client_id) }}"
-      enabled: true
-      protocol: openid-connect
-      publicClient: "{{ keycloak_client.public_client | default(true) }}"
-      standardFlowEnabled: "{{ keycloak_client.standard_flow_enabled | default(true) }}"
-      directAccessGrantsEnabled: "{{ keycloak_client.direct_access_grants_enabled | default(false) }}"
-      serviceAccountsEnabled: "{{ keycloak_client.service_accounts_enabled | default(false) }}"
-      rootUrl: "{{ keycloak_client.root_url | default('') }}"
-      baseUrl: "{{ keycloak_client.base_url | default('') }}"
-      redirectUris: "{{ keycloak_client.redirect_uris | default([]) }}"
-      webOrigins: "{{ keycloak_client.web_origins | default([]) }}"
+    body: "{{ keycloak_client_payload }}"
     status_code:
       - 201
       - 409
@@ -68,20 +92,7 @@
     headers:
       Authorization: "Bearer {{ keycloak_admin_access_token }}"
     body_format: json
-    body:
-      id: "{{ keycloak_final_client_id }}"
-      clientId: "{{ keycloak_client.client_id }}"
-      name: "{{ keycloak_client.name | default(keycloak_client.client_id) }}"
-      enabled: true
-      protocol: openid-connect
-      publicClient: "{{ keycloak_client.public_client | default(true) }}"
-      standardFlowEnabled: "{{ keycloak_client.standard_flow_enabled | default(true) }}"
-      directAccessGrantsEnabled: "{{ keycloak_client.direct_access_grants_enabled | default(false) }}"
-      serviceAccountsEnabled: "{{ keycloak_client.service_accounts_enabled | default(false) }}"
-      rootUrl: "{{ keycloak_client.root_url | default('') }}"
-      baseUrl: "{{ keycloak_client.base_url | default('') }}"
-      redirectUris: "{{ keycloak_client.redirect_uris | default([]) }}"
-      webOrigins: "{{ keycloak_client.web_origins | default([]) }}"
+    body: "{{ keycloak_client_payload | combine({'id': keycloak_final_client_id}) }}"
     status_code: 204
     use_proxy: false
   when: keycloak_final_client_id | length > 0

@@ -23,6 +23,11 @@ This structure is organized around two files:
         │   ├── preflight.yml
         │   ├── system.yml
         │   ├── deploy.yml
+        │   ├── destroy.yml
+        │   ├── identity.yml
+        │   ├── identity_client.yml
+        │   ├── identity_user.yml
+        │   ├── identity_user_client_role.yml
         │   ├── nginx.yml
         │   └── summary.yml
         └── templates/
@@ -48,9 +53,10 @@ That same file also holds:
 - Keycloak admin username/password
 - Postgres password
 - domain and Let's Encrypt email
+- stack state and destroy behavior flags
 - realm and client bootstrap config
 - project directory
-- theme/provider JAR path
+- theme/provider JAR path and realm login theme
 - package lists
 - optional extra SSH args
 
@@ -65,9 +71,12 @@ just deploy
 Other useful commands:
 
 ```bash
+just destroy
 just check
 just syntax
 ```
+
+`just destroy` runs the same playbook in destroy mode and removes the deployed Keycloak stack from the target host.
 
 ## HTTPS
 
@@ -85,14 +94,18 @@ Then run `just deploy`.
 By default the deploy now also ensures:
 
 - realm: `a8s`
+- login theme: `keycloakify-starter`
+- realm user: `a8s-admin` with a configurable password
 - clients: `a8s-frontend`, `a8s-frontend-local`
 
-Those values live in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml), including the default redirect URIs and web origins for each client.
+Those values live in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml), including the realm login theme, realm users, passwords, role mappings, and the default redirect URIs and web origins for each client.
 
 ## Notes
 
 - The playbook currently targets Debian/Ubuntu hosts.
 - Generated passwords are stored in `./.ansible/generated/` when you leave them empty in `group_vars/all.yml`.
 - Local provider/theme directories are supported if you create `./keycloak/providers/` or `./keycloak/themes/`.
+- This repo already contains a provider JAR at `provider/keycloak-theme-for-kc-all-other-versions.jar`, and the playbook now uses it by default as the `keycloakify-starter` login theme.
 - This project does not use a service-account key file. If you later add Google Cloud automation, use ADC instead.
 - If SSH still says `Permission denied (publickey)`, the server likely does not have the matching public key in `~/.ssh/authorized_keys` for `target_host_user`.
+- Destroy behavior is controlled by `keycloak_destroy_remove_volumes`, `keycloak_destroy_remove_project_dir`, `keycloak_destroy_remove_tls_assets`, and `keycloak_destroy_restore_default_nginx_site` in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml).

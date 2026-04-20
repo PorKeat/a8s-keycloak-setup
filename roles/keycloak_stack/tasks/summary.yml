@@ -5,6 +5,19 @@
       - "Access URL: {{ ('https://' ~ keycloak_domain) if ((keycloak_enable_tls_effective | bool) and (keycloak_tls_cert.stat.exists | default(false))) else ('http://' ~ keycloak_target_host_effective) }}"
       - "Admin username: {{ keycloak_admin_user_effective }}"
       - "Realm: {{ keycloak_realm_name }}"
+      - "Login theme: {{ keycloak_realm_login_theme_effective if (keycloak_realm_login_theme_effective | length > 0) else 'default' }}"
+      - "Realm users: {{ keycloak_realm_users | default([]) | map(attribute='username') | list | join(', ') }}"
       - "Clients: {{ keycloak_clients | map(attribute='client_id') | list | join(', ') }}"
+      - "Provider JAR: {{ keycloak_provider_jar_effective if (keycloak_provider_jar_effective | length > 0) else 'none' }}"
       - "Generated admin password file: {{ generated_secret_dir ~ '/' ~ inventory_hostname ~ '.keycloak_admin_password' if (keycloak_admin_password is not defined or keycloak_admin_password | length == 0) else 'provided via keycloak_admin_password' }}"
       - "Generated Postgres password file: {{ generated_secret_dir ~ '/' ~ inventory_hostname ~ '.postgres_password' if (keycloak_postgres_password is not defined or keycloak_postgres_password | length == 0) else 'provided via keycloak_postgres_password' }}"
+  when: keycloak_stack_state | default('present') == 'present'
+
+- name: Print destroy summary
+  ansible.builtin.debug:
+    msg:
+      - "Destroyed Keycloak stack from host: {{ keycloak_target_host_effective }}"
+      - "Removed Docker volumes: {{ keycloak_destroy_remove_volumes | bool }}"
+      - "Removed project directory: {{ keycloak_destroy_remove_project_dir | bool }}"
+      - "Removed TLS assets: {{ keycloak_destroy_remove_tls_assets | bool }}"
+  when: keycloak_stack_state | default('present') == 'absent'

@@ -1,0 +1,91 @@
+---
+- name: Check whether the deployed Docker Compose file exists
+  ansible.builtin.stat:
+    path: "{{ keycloak_project_dir }}/docker-compose.yml"
+  register: keycloak_destroy_compose_file
+
+- name: Stop and remove the Keycloak Docker Compose stack
+  ansible.builtin.command:
+    argv: "{{ ['docker', 'compose', 'down', '--remove-orphans'] + (['--volumes'] if (keycloak_destroy_remove_volumes | bool) else []) }}"
+  args:
+    chdir: "{{ keycloak_project_dir }}"
+  register: keycloak_compose_down
+  changed_when: >-
+    'Stopping' in keycloak_compose_down.stdout or
+    'Removing' in keycloak_compose_down.stdout or
+    'Network' in keycloak_compose_down.stdout or
+    'Volume' in keycloak_compose_down.stdout
+  failed_when: false
+  when: keycloak_destroy_compose_file.stat.exists
+
+- name: Remove the Keycloak Nginx site symlink
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/keycloak
+    state: absent
+
+- name: Remove the Keycloak Nginx site file
+  ansible.builtin.file:
+    path: /etc/nginx/sites-available/keycloak
+    state: absent
+
+- name: Check whether the default Nginx site is available
+  ansible.builtin.stat:
+    path: /etc/nginx/sites-available/default
+  register: keycloak_default_nginx_site
+  when: keycloak_destroy_restore_default_nginx_site | bool
+
+- name: Restore the default Nginx site symlink
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/default
+    dest: /etc/nginx/sites-enabled/default
+    state: link
+  when:
+    - keycloak_destroy_restore_default_nginx_site | bool
+    - keycloak_default_nginx_site.stat.exists
+
+- name: Check whether Nginx is installed
+  ansible.builtin.stat:
+    path: /usr/sbin/nginx
+  register: keycloak_nginx_binary
+
+- name: Validate the Nginx configuration after removing the Keycloak site
+  ansible.builtin.command:
+    cmd: nginx -t
+  changed_when: false
+  when: keycloak_nginx_binary.stat.exists
+
+- name: Reload Nginx after removing the Keycloak site
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+  when: keycloak_nginx_binary.stat.exists
+
+- name: Remove the Let's Encrypt certificate directory for the Keycloak domain
+  ansible.builtin.file:
+    path: "/etc/letsencrypt/live/{{ keycloak_domain }}"
+    state: absent
+  when:
+    - keycloak_destroy_remove_tls_assets | bool
+    - keycloak_domain | default('') | length > 0
+
+- name: Remove the Let's Encrypt archive directory for the Keycloak domain
+  ansible.builtin.file:
+    path: "/etc/letsencrypt/archive/{{ keycloak_domain }}"
+    state: absent
+  when:
+    - keycloak_destroy_remove_tls_assets | bool
+    - keycloak_domain | default('') | length > 0
+
+- name: Remove the Let's Encrypt renewal file for the Keycloak domain
+  ansible.builtin.file:
+    path: "/etc/letsencrypt/renewal/{{ keycloak_domain }}.conf"
+    state: absent
+  when:
+    - keycloak_destroy_remove_tls_assets | bool
+    - keycloak_domain | default('') | length > 0
+
+- name: Remove the remote Keycloak project directory
+  ansible.builtin.file:
+    path: "{{ keycloak_project_dir }}"
+    state: absent
+  when: keycloak_destroy_remove_project_dir | bool

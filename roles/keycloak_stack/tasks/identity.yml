@@ -1,4 +1,21 @@
 ---
+- name: Build the desired Keycloak realm payload
+  ansible.builtin.set_fact:
+    keycloak_realm_payload: >-
+      {{
+        {
+          'realm': keycloak_realm_name,
+          'enabled': true,
+          'displayName': keycloak_realm_display_name,
+          'sslRequired': keycloak_realm_ssl_required
+        }
+        | combine(
+            {'loginTheme': keycloak_realm_login_theme_effective}
+            if (keycloak_realm_login_theme_effective | length > 0)
+            else {}
+          )
+      }}
+
 - name: Request a Keycloak admin access token
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ keycloak_http_port }}/realms/master/protocol/openid-connect/token"
@@ -43,11 +60,7 @@
     headers:
       Authorization: "Bearer {{ keycloak_admin_access_token }}"
     body_format: json
-    body:
-      realm: "{{ keycloak_realm_name }}"
-      enabled: true
-      displayName: "{{ keycloak_realm_display_name }}"
-      sslRequired: "{{ keycloak_realm_ssl_required }}"
+    body: "{{ keycloak_realm_payload }}"
     status_code:
       - 201
       - 409
@@ -61,13 +74,15 @@
     headers:
       Authorization: "Bearer {{ keycloak_admin_access_token }}"
     body_format: json
-    body:
-      realm: "{{ keycloak_realm_name }}"
-      enabled: true
-      displayName: "{{ keycloak_realm_display_name }}"
-      sslRequired: "{{ keycloak_realm_ssl_required }}"
+    body: "{{ keycloak_realm_payload }}"
     status_code: 204
     use_proxy: false
+
+- name: Ensure the configured realm users exist
+  ansible.builtin.include_tasks: identity_user.yml
+  loop: "{{ keycloak_realm_users | default([]) }}"
+  loop_control:
+    loop_var: keycloak_realm_user
 
 - name: Ensure the configured realm clients exist
   ansible.builtin.include_tasks: identity_client.yml

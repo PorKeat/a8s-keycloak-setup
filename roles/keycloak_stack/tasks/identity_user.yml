@@ -1,0 +1,104 @@
+---
+- name: Build the desired Keycloak realm user payload
+  ansible.builtin.set_fact:
+    keycloak_realm_user_payload: >-
+      {{
+        {
+          'username': keycloak_realm_user.username,
+          'enabled': keycloak_realm_user.enabled | default(true) | bool,
+          'emailVerified': keycloak_realm_user.email_verified | default(false) | bool,
+          'firstName': keycloak_realm_user.first_name | default(''),
+          'lastName': keycloak_realm_user.last_name | default(''),
+          'email': keycloak_realm_user.email | default(''),
+          'attributes': keycloak_realm_user.attributes | default({}),
+          'requiredActions': keycloak_realm_user.required_actions | default([])
+        }
+      }}
+
+- name: Look up the existing Keycloak realm user
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/users?username={{ keycloak_realm_user.username | urlencode }}&exact=true"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_existing_realm_user
+
+- name: Store the current Keycloak realm user id when present
+  ansible.builtin.set_fact:
+    keycloak_existing_realm_user_id: "{{ (keycloak_existing_realm_user.json | first).id if (keycloak_existing_realm_user.json | length > 0) else '' }}"
+
+- name: Create the Keycloak realm user when missing
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/users"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body: "{{ keycloak_realm_user_payload }}"
+    status_code:
+      - 201
+      - 409
+    use_proxy: false
+  when: keycloak_existing_realm_user_id | length == 0
+
+- name: Refresh the Keycloak realm user id after creation
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/users?username={{ keycloak_realm_user.username | urlencode }}&exact=true"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_existing_realm_user_after_create
+  when: keycloak_existing_realm_user_id | length == 0
+
+- name: Resolve the final Keycloak realm user id
+  ansible.builtin.set_fact:
+    keycloak_final_realm_user_id: >-
+      {{
+        keycloak_existing_realm_user_id
+        if (keycloak_existing_realm_user_id | length > 0)
+        else ((keycloak_existing_realm_user_after_create.json | first).id if (keycloak_existing_realm_user_after_create.json | length > 0) else '')
+      }}
+
+- name: Update the Keycloak realm user configuration
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/users/{{ keycloak_final_realm_user_id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body: "{{ keycloak_realm_user_payload | combine({'id': keycloak_final_realm_user_id}) }}"
+    status_code: 204
+    use_proxy: false
+  when: keycloak_final_realm_user_id | length > 0
+
+- name: Set the Keycloak realm user password
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/users/{{ keycloak_final_realm_user_id }}/reset-password"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body:
+      type: password
+      temporary: "{{ keycloak_realm_user.temporary_password | default(false) | bool }}"
+      value: "{{ keycloak_realm_user.password }}"
+    status_code: 204
+    use_proxy: false
+  when:
+    - keycloak_final_realm_user_id | length > 0
+    - keycloak_realm_user.password is defined
+    - keycloak_realm_user.password | length > 0
+  no_log: true
+
+- name: Ensure the configured Keycloak client roles are assigned to the realm user
+  ansible.builtin.include_tasks: identity_user_client_role.yml
+  loop: "{{ keycloak_realm_user.client_roles | default({}) | dict2items }}"
+  loop_control:
+    loop_var: keycloak_user_client_role_mapping
+  when: keycloak_final_realm_user_id | length > 0

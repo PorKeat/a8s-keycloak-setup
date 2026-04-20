@@ -1,0 +1,59 @@
+---
+- name: Ensure this playbook runs on Debian-family hosts
+  ansible.builtin.assert:
+    that:
+      - ansible_facts["os_family"] == 'Debian'
+    fail_msg: This playbook currently supports Debian and Ubuntu hosts only.
+
+- name: Ensure local cache directories exist
+  delegate_to: localhost
+  become: false
+  run_once: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ playbook_dir }}/.ansible"
+    - "{{ playbook_dir }}/.ansible/tmp"
+    - "{{ generated_secret_dir }}"
+
+- name: Resolve connection and hostname values
+  ansible.builtin.set_fact:
+    keycloak_target_host_effective: "{{ ansible_host | default(inventory_hostname) }}"
+    keycloak_server_name_effective: "{{ keycloak_domain | default(ansible_host | default(inventory_hostname), true) }}"
+    keycloak_enable_tls_effective: "{{ (keycloak_domain | default('', true) | length > 0) and (letsencrypt_email | default('', true) | length > 0) }}"
+
+- name: Use the provided Postgres password
+  ansible.builtin.set_fact:
+    keycloak_postgres_password_effective: "{{ keycloak_postgres_password }}"
+  when:
+    - keycloak_postgres_password is defined
+    - keycloak_postgres_password | length > 0
+  no_log: true
+
+- name: Generate a Postgres password when one is not provided
+  ansible.builtin.set_fact:
+    keycloak_postgres_password_effective: "{{ lookup('ansible.builtin.password', generated_secret_dir ~ '/' ~ inventory_hostname ~ '.postgres_password chars=ascii_letters,digits length=32') }}"
+  when:
+    - keycloak_postgres_password is not defined or keycloak_postgres_password | length == 0
+  no_log: true
+
+- name: Use the provided Keycloak admin password
+  ansible.builtin.set_fact:
+    keycloak_admin_password_effective: "{{ keycloak_admin_password }}"
+  when:
+    - keycloak_admin_password is defined
+    - keycloak_admin_password | length > 0
+  no_log: true
+
+- name: Generate a Keycloak admin password when one is not provided
+  ansible.builtin.set_fact:
+    keycloak_admin_password_effective: "{{ lookup('ansible.builtin.password', generated_secret_dir ~ '/' ~ inventory_hostname ~ '.keycloak_admin_password chars=ascii_letters,digits length=24') }}"
+  when:
+    - keycloak_admin_password is not defined or keycloak_admin_password | length == 0
+  no_log: true
+
+- name: Resolve the effective Keycloak admin user
+  ansible.builtin.set_fact:
+    keycloak_admin_user_effective: "{{ keycloak_admin_user | default('admin', true) }}"

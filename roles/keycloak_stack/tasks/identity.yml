@@ -1,0 +1,76 @@
+---
+- name: Request a Keycloak admin access token
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/realms/master/protocol/openid-connect/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      client_id: admin-cli
+      username: "{{ keycloak_admin_user_effective }}"
+      password: "{{ keycloak_admin_password_effective }}"
+      grant_type: password
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_admin_token_response
+  no_log: true
+
+- name: Store the Keycloak admin access token
+  ansible.builtin.set_fact:
+    keycloak_admin_access_token: "{{ keycloak_admin_token_response.json.access_token }}"
+  no_log: true
+
+- name: Check whether the target realm already exists
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code:
+      - 200
+      - 404
+    use_proxy: false
+  register: keycloak_target_realm
+  no_log: true
+
+- name: Create the target realm when it does not exist
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body:
+      realm: "{{ keycloak_realm_name }}"
+      enabled: true
+      displayName: "{{ keycloak_realm_display_name }}"
+      sslRequired: "{{ keycloak_realm_ssl_required }}"
+    status_code:
+      - 201
+      - 409
+    use_proxy: false
+  when: keycloak_target_realm.status == 404
+
+- name: Update the target realm configuration
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body:
+      realm: "{{ keycloak_realm_name }}"
+      enabled: true
+      displayName: "{{ keycloak_realm_display_name }}"
+      sslRequired: "{{ keycloak_realm_ssl_required }}"
+    status_code: 204
+    use_proxy: false
+
+- name: Ensure the configured realm clients exist
+  ansible.builtin.include_tasks: identity_client.yml
+  loop: "{{ keycloak_clients }}"
+  loop_control:
+    loop_var: keycloak_client

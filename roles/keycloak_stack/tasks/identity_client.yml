@@ -1,0 +1,87 @@
+---
+- name: Look up the existing Keycloak client
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/clients?clientId={{ keycloak_client.client_id | urlencode }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_existing_client
+
+- name: Store the current Keycloak client id when present
+  ansible.builtin.set_fact:
+    keycloak_existing_client_id: "{{ (keycloak_existing_client.json | first).id if (keycloak_existing_client.json | length > 0) else '' }}"
+
+- name: Create the Keycloak client when missing
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/clients"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body:
+      clientId: "{{ keycloak_client.client_id }}"
+      name: "{{ keycloak_client.name | default(keycloak_client.client_id) }}"
+      enabled: true
+      protocol: openid-connect
+      publicClient: "{{ keycloak_client.public_client | default(true) }}"
+      standardFlowEnabled: "{{ keycloak_client.standard_flow_enabled | default(true) }}"
+      directAccessGrantsEnabled: "{{ keycloak_client.direct_access_grants_enabled | default(false) }}"
+      serviceAccountsEnabled: "{{ keycloak_client.service_accounts_enabled | default(false) }}"
+      rootUrl: "{{ keycloak_client.root_url | default('') }}"
+      baseUrl: "{{ keycloak_client.base_url | default('') }}"
+      redirectUris: "{{ keycloak_client.redirect_uris | default([]) }}"
+      webOrigins: "{{ keycloak_client.web_origins | default([]) }}"
+    status_code:
+      - 201
+      - 409
+    use_proxy: false
+  when: keycloak_existing_client_id | length == 0
+
+- name: Refresh the Keycloak client id after creation
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/clients?clientId={{ keycloak_client.client_id | urlencode }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_existing_client_after_create
+  when: keycloak_existing_client_id | length == 0
+
+- name: Resolve the final Keycloak client id
+  ansible.builtin.set_fact:
+    keycloak_final_client_id: >-
+      {{
+        keycloak_existing_client_id
+        if (keycloak_existing_client_id | length > 0)
+        else ((keycloak_existing_client_after_create.json | first).id if (keycloak_existing_client_after_create.json | length > 0) else '')
+      }}
+
+- name: Update the Keycloak client configuration
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/clients/{{ keycloak_final_client_id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body:
+      id: "{{ keycloak_final_client_id }}"
+      clientId: "{{ keycloak_client.client_id }}"
+      name: "{{ keycloak_client.name | default(keycloak_client.client_id) }}"
+      enabled: true
+      protocol: openid-connect
+      publicClient: "{{ keycloak_client.public_client | default(true) }}"
+      standardFlowEnabled: "{{ keycloak_client.standard_flow_enabled | default(true) }}"
+      directAccessGrantsEnabled: "{{ keycloak_client.direct_access_grants_enabled | default(false) }}"
+      serviceAccountsEnabled: "{{ keycloak_client.service_accounts_enabled | default(false) }}"
+      rootUrl: "{{ keycloak_client.root_url | default('') }}"
+      baseUrl: "{{ keycloak_client.base_url | default('') }}"
+      redirectUris: "{{ keycloak_client.redirect_uris | default([]) }}"
+      webOrigins: "{{ keycloak_client.web_origins | default([]) }}"
+    status_code: 204
+    use_proxy: false
+  when: keycloak_final_client_id | length > 0

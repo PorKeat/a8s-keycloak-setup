@@ -1,0 +1,84 @@
+---
+- name: Define the deployment target
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+    - name: Ensure the target host IP is configured
+      ansible.builtin.assert:
+        that:
+          - target_host_ip | length > 0
+        fail_msg: Set target_host_ip in group_vars/all.yml before running the playbook.
+
+    - name: Check whether the configured SSH private key exists
+      ansible.builtin.stat:
+        path: "{{ target_host_private_key_file }}"
+      when: target_host_private_key_file | default('') | length > 0
+      register: target_host_private_key_stat
+
+    - name: Ensure the configured SSH private key exists
+      ansible.builtin.assert:
+        that:
+          - target_host_private_key_stat.stat.exists
+        fail_msg: "SSH private key not found: {{ target_host_private_key_file }}"
+      when: target_host_private_key_file | default('') | length > 0
+
+    - name: Check whether the configured SSH config file exists
+      ansible.builtin.stat:
+        path: "{{ target_host_ssh_config_file }}"
+      when: target_host_ssh_config_file | default('') | length > 0
+      register: target_host_ssh_config_stat
+
+    - name: Ensure the configured SSH config file exists
+      ansible.builtin.assert:
+        that:
+          - target_host_ssh_config_stat.stat.exists
+        fail_msg: "SSH config file not found: {{ target_host_ssh_config_file }}"
+      when: target_host_ssh_config_file | default('') | length > 0
+
+    - name: Build effective SSH common args
+      ansible.builtin.set_fact:
+        target_host_ssh_common_args_effective: >-
+          {{
+            (
+              (['-F ' ~ target_host_ssh_config_file] if (target_host_ssh_config_file | default('') | length > 0) else [])
+              +
+              ([target_host_ssh_common_args] if (target_host_ssh_common_args | default('') | length > 0) else [])
+            ) | join(' ')
+          }}
+
+    - name: Add the target host to the in-memory inventory
+      ansible.builtin.add_host:
+        name: "{{ target_host_ip }}"
+        groups: keycloak_targets
+        ansible_host: "{{ target_host_ip }}"
+        ansible_user: "{{ target_host_user }}"
+        ansible_port: "{{ target_host_port }}"
+        ansible_ssh_private_key_file: "{{ target_host_private_key_file if (target_host_private_key_file | default('') | length > 0) else omit }}"
+        ansible_ssh_common_args: "{{ target_host_ssh_common_args_effective if (target_host_ssh_common_args_effective | length > 0) else omit }}"
+        ansible_remote_tmp: "{{ target_host_remote_tmp }}"
+
+- name: Bootstrap remote Ansible temp directory
+  hosts: keycloak_targets
+  gather_facts: false
+  become: false
+  vars_files:
+    - group_vars/all.yml
+
+  tasks:
+    - name: Ensure the remote Ansible temp directory exists for the SSH user
+      ansible.builtin.raw: "umask 077 && mkdir -p {{ target_host_remote_tmp }}"
+      changed_when: false
+
+- name: Deploy Keycloak stack
+  hosts: keycloak_targets
+  become: true
+  gather_facts: true
+  vars_files:
+    - group_vars/all.yml
+
+  roles:
+    - role: keycloak_stack

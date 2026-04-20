@@ -1,0 +1,75 @@
+---
+- name: Check whether a TLS certificate already exists
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ keycloak_domain }}/fullchain.pem"
+  when: keycloak_enable_tls_effective | bool
+  register: keycloak_existing_cert
+
+- name: Disable the default Nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: Install the initial Nginx site configuration
+  ansible.builtin.template:
+    src: keycloak.nginx.j2
+    dest: /etc/nginx/sites-available/keycloak
+    mode: "0644"
+  vars:
+    keycloak_tls_ready: "{{ keycloak_enable_tls_effective and (keycloak_existing_cert.stat.exists | default(false)) }}"
+
+- name: Enable the Keycloak Nginx site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/keycloak
+    dest: /etc/nginx/sites-enabled/keycloak
+    state: link
+
+- name: Validate the Nginx configuration before reloading
+  ansible.builtin.command:
+    cmd: nginx -t
+  changed_when: false
+
+- name: Reload Nginx after installing the initial site configuration
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+
+- name: Request the Let's Encrypt certificate
+  ansible.builtin.command:
+    argv:
+      - certbot
+      - certonly
+      - --nginx
+      - --non-interactive
+      - --agree-tos
+      - -m
+      - "{{ letsencrypt_email }}"
+      - -d
+      - "{{ keycloak_domain }}"
+  when:
+    - keycloak_enable_tls_effective | bool
+    - not (keycloak_existing_cert.stat.exists | default(false))
+
+- name: Check whether the TLS certificate exists after certbot
+  ansible.builtin.stat:
+    path: "/etc/letsencrypt/live/{{ keycloak_domain }}/fullchain.pem"
+  when: keycloak_enable_tls_effective | bool
+  register: keycloak_tls_cert
+
+- name: Render the final Nginx configuration
+  ansible.builtin.template:
+    src: keycloak.nginx.j2
+    dest: /etc/nginx/sites-available/keycloak
+    mode: "0644"
+  vars:
+    keycloak_tls_ready: "{{ keycloak_enable_tls_effective and (keycloak_tls_cert.stat.exists | default(false)) }}"
+
+- name: Validate the final Nginx configuration
+  ansible.builtin.command:
+    cmd: nginx -t
+  changed_when: false
+
+- name: Restart Nginx with the final configuration
+  ansible.builtin.service:
+    name: nginx
+    state: restarted

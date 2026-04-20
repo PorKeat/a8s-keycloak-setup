@@ -1,0 +1,10 @@
+---
+- name: Print deployment summary
+  ansible.builtin.debug:
+    msg:
+      - "Access URL: {{ ('https://' ~ keycloak_domain) if ((keycloak_enable_tls_effective | bool) and (keycloak_tls_cert.stat.exists | default(false))) else ('http://' ~ keycloak_target_host_effective) }}"
+      - "Admin username: {{ keycloak_admin_user_effective }}"
+      - "Realm: {{ keycloak_realm_name }}"
+      - "Clients: {{ keycloak_clients | map(attribute='client_id') | list | join(', ') }}"
+      - "Generated admin password file: {{ generated_secret_dir ~ '/' ~ inventory_hostname ~ '.keycloak_admin_password' if (keycloak_admin_password is not defined or keycloak_admin_password | length == 0) else 'provided via keycloak_admin_password' }}"
+      - "Generated Postgres password file: {{ generated_secret_dir ~ '/' ~ inventory_hostname ~ '.postgres_password' if (keycloak_postgres_password is not defined or keycloak_postgres_password | length == 0) else 'provided via keycloak_postgres_password' }}"

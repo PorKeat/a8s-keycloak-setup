@@ -1,0 +1,77 @@
+---
+# Target host connection
+target_host_ip: 35.185.180.41
+target_host_user: github-actions
+target_host_port: 22
+target_host_private_key_file: "{{ lookup('env', 'HOME') }}/.ssh/github-actions-key"
+target_host_ssh_config_file: "{{ lookup('env', 'HOME') }}/.ssh/config"
+target_host_ssh_common_args: ""
+target_host_remote_tmp: "/tmp/.ansible-{{ target_host_user }}/tmp"
+
+# Keycloak application settings
+keycloak_project_dir: /opt/keycloak-postgres-docker
+keycloak_db_name: db_keycloak
+keycloak_db_user: postgres
+keycloak_admin_user: admin
+keycloak_admin_password: "1234"
+keycloak_postgres_password: "1234"
+keycloak_http_port: 9090
+keycloak_theme_jar: ""
+keycloak_readiness_path: /realms/master/.well-known/openid-configuration
+keycloak_realm_name: a8s
+keycloak_realm_display_name: A8S
+keycloak_realm_ssl_required: "{{ 'external' if (keycloak_domain | length > 0) else 'none' }}"
+keycloak_clients:
+  - client_id: a8s-frontend
+    name: a8s-frontend
+    public_client: true
+    standard_flow_enabled: true
+    direct_access_grants_enabled: false
+    service_accounts_enabled: false
+    root_url: "{{ ('https://' ~ keycloak_domain) if (keycloak_domain | length > 0) else ('http://' ~ target_host_ip) }}"
+    base_url: /
+    redirect_uris:
+      - "{{ ('https://' ~ keycloak_domain ~ '/*') if (keycloak_domain | length > 0) else ('http://' ~ target_host_ip ~ '/*') }}"
+    web_origins:
+      - "{{ ('https://' ~ keycloak_domain) if (keycloak_domain | length > 0) else ('http://' ~ target_host_ip) }}"
+  - client_id: a8s-frontend-local
+    name: a8s-frontend-local
+    public_client: true
+    standard_flow_enabled: true
+    direct_access_grants_enabled: false
+    service_accounts_enabled: false
+    root_url: http://localhost:3000
+    base_url: /
+    redirect_uris:
+      - http://localhost:3000/*
+      - http://127.0.0.1:3000/*
+    web_origins:
+      - http://localhost:3000
+      - http://127.0.0.1:3000
+
+keycloak_domain: ""
+letsencrypt_email: ""
+
+# Local generated secrets/cache
+generated_secret_dir: "{{ playbook_dir }}/.ansible/generated"
+
+# OS packages
+keycloak_os_packages:
+  - ca-certificates
+  - certbot
+  - curl
+  - gnupg
+  - nginx
+  - python3-certbot-nginx
+
+# Docker packages
+docker_packages:
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-ce
+  - docker-ce-cli
+  - docker-compose-plugin
+
+docker_arch_map:
+  x86_64: amd64
+  aarch64: arm64

@@ -1,0 +1,195 @@
+---
+- name: Ensure remote project directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ keycloak_project_dir }}", mode: "0755" }
+    - { path: "{{ keycloak_project_dir }}/secrets", mode: "0700" }
+    - { path: "{{ keycloak_project_dir }}/keycloak", mode: "0755" }
+    - { path: "{{ keycloak_project_dir }}/keycloak/themes", mode: "0755" }
+    - { path: "{{ keycloak_project_dir }}/keycloak/providers", mode: "0755" }
+
+- name: Write secret files
+  ansible.builtin.copy:
+    dest: "{{ item.dest }}"
+    content: "{{ item.content }}\n"
+    mode: "0600"
+  loop:
+    - dest: "{{ keycloak_project_dir }}/secrets/postgres_password.txt"
+      content: "{{ keycloak_postgres_password_effective }}"
+    - dest: "{{ keycloak_project_dir }}/secrets/kc_admin_user.txt"
+      content: "{{ keycloak_admin_user_effective }}"
+    - dest: "{{ keycloak_project_dir }}/secrets/kc_admin_password.txt"
+      content: "{{ keycloak_admin_password_effective }}"
+  no_log: true
+
+- name: Render the Keycloak environment file
+  ansible.builtin.template:
+    src: keycloak.env.j2
+    dest: "{{ keycloak_project_dir }}/.env"
+    mode: "0600"
+  no_log: true
+
+- name: Render the Docker Compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ keycloak_project_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Check for a local themes directory
+  delegate_to: localhost
+  become: false
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/keycloak/themes"
+  register: local_themes_dir
+
+- name: Upload the local themes directory when present
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/keycloak/themes/"
+    dest: "{{ keycloak_project_dir }}/keycloak/themes/"
+  when:
+    - local_themes_dir.stat.exists
+    - local_themes_dir.stat.isdir
+
+- name: Check for a local providers directory
+  delegate_to: localhost
+  become: false
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/keycloak/providers"
+  register: local_providers_dir
+
+- name: Upload the local providers directory when present
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/keycloak/providers/"
+    dest: "{{ keycloak_project_dir }}/keycloak/providers/"
+  when:
+    - local_providers_dir.stat.exists
+    - local_providers_dir.stat.isdir
+  register: local_providers_sync
+
+- name: Check whether the requested local provider jar exists
+  delegate_to: localhost
+  become: false
+  ansible.builtin.stat:
+    path: "{{ keycloak_theme_jar }}"
+  when: keycloak_theme_jar | length > 0
+  register: local_theme_jar
+
+- name: Fail when the requested provider jar does not exist
+  ansible.builtin.assert:
+    that:
+      - local_theme_jar.stat.exists
+    fail_msg: "Local Keycloak provider JAR not found: {{ keycloak_theme_jar }}"
+  when: keycloak_theme_jar | length > 0
+
+- name: Upload the requested provider jar
+  ansible.builtin.copy:
+    src: "{{ keycloak_theme_jar }}"
+    dest: "{{ keycloak_project_dir }}/keycloak/providers/{{ keycloak_theme_jar | basename }}"
+    mode: "0644"
+  when:
+    - keycloak_theme_jar | length > 0
+    - local_theme_jar.stat.exists
+  register: uploaded_theme_jar
+
+- name: Determine whether a Keycloak provider rebuild is needed
+  ansible.builtin.set_fact:
+    keycloak_provider_rebuild_required: "{{ (local_providers_sync.changed | default(false)) or (uploaded_theme_jar.changed | default(false)) }}"
+
+- name: Start or update the Docker Compose stack
+  ansible.builtin.command:
+    cmd: docker compose up -d
+  args:
+    chdir: "{{ keycloak_project_dir }}"
+  register: keycloak_compose_up
+  changed_when: >
+    'Creating' in keycloak_compose_up.stdout or
+    'Recreating' in keycloak_compose_up.stdout or
+    'Starting' in keycloak_compose_up.stdout
+
+- name: Wait for Keycloak to become reachable and ready
+  block:
+    - name: Wait for the Keycloak port to accept connections
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ keycloak_http_port }}"
+        connect_timeout: 5
+        delay: 2
+        sleep: 3
+        timeout: 180
+
+    - name: Wait for the Keycloak readiness endpoint
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ keycloak_http_port }}{{ keycloak_readiness_path }}"
+        method: GET
+        status_code: 200
+        use_proxy: false
+      register: keycloak_healthcheck
+      retries: 30
+      delay: 5
+      until: keycloak_healthcheck.status == 200
+      changed_when: false
+
+  rescue:
+    - name: Capture Docker Compose service status
+      ansible.builtin.command:
+        cmd: docker compose ps
+      args:
+        chdir: "{{ keycloak_project_dir }}"
+      register: keycloak_compose_ps
+      changed_when: false
+      failed_when: false
+
+    - name: Capture recent Docker Compose logs
+      ansible.builtin.command:
+        cmd: docker compose logs --tail=200 db keycloak
+      args:
+        chdir: "{{ keycloak_project_dir }}"
+      register: keycloak_compose_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Show Docker Compose status when Keycloak is not ready
+      ansible.builtin.debug:
+        var: keycloak_compose_ps.stdout_lines
+
+    - name: Show recent Docker Compose logs when Keycloak is not ready
+      ansible.builtin.debug:
+        var: keycloak_compose_logs.stdout_lines
+
+    - name: Fail when Keycloak did not become ready
+      ansible.builtin.fail:
+        msg: "Keycloak did not become ready on http://127.0.0.1:{{ keycloak_http_port }}{{ keycloak_readiness_path }}. Review the Docker Compose logs above."
+
+- name: Build Keycloak after provider updates
+  ansible.builtin.command:
+    cmd: docker compose exec -T keycloak /opt/keycloak/bin/kc.sh build
+  args:
+    chdir: "{{ keycloak_project_dir }}"
+  register: keycloak_build
+  retries: 5
+  delay: 10
+  until: keycloak_build.rc == 0
+  when: keycloak_provider_rebuild_required | bool
+
+- name: Restart Keycloak after rebuilding providers
+  ansible.builtin.command:
+    cmd: docker compose restart keycloak
+  args:
+    chdir: "{{ keycloak_project_dir }}"
+  when: keycloak_provider_rebuild_required | bool
+
+- name: Wait for Keycloak to become ready after provider rebuild
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}{{ keycloak_readiness_path }}"
+    method: GET
+    status_code: 200
+    use_proxy: false
+  register: keycloak_rebuild_healthcheck
+  retries: 30
+  delay: 5
+  until: keycloak_rebuild_healthcheck.status == 200
+  changed_when: false
+  when: keycloak_provider_rebuild_required | bool

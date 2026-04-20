@@ -16,28 +16,8 @@
           )
       }}
 
-- name: Request a Keycloak admin access token
-  ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ keycloak_http_port }}/realms/master/protocol/openid-connect/token"
-    method: POST
-    body_format: form-urlencoded
-    body:
-      client_id: admin-cli
-      username: "{{ keycloak_admin_user_effective }}"
-      password: "{{ keycloak_admin_password_effective }}"
-      grant_type: password
-    headers:
-      Content-Type: application/x-www-form-urlencoded
-    return_content: true
-    status_code: 200
-    use_proxy: false
-  register: keycloak_admin_token_response
-  no_log: true
-
-- name: Store the Keycloak admin access token
-  ansible.builtin.set_fact:
-    keycloak_admin_access_token: "{{ keycloak_admin_token_response.json.access_token }}"
-  no_log: true
+- name: Authenticate to the Keycloak admin API
+  ansible.builtin.import_tasks: identity_auth.yml
 
 - name: Check whether the target realm already exists
   ansible.builtin.uri:

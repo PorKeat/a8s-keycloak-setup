@@ -1,30 +1,25 @@
 ---
-# Target host connection
-target_host_ip: 35.185.180.41
-target_host_user: github-actions
-target_host_port: 22
-target_host_private_key_file: "{{ lookup('env', 'HOME') }}/.ssh/github-actions-key"
-target_host_ssh_config_file: "{{ lookup('env', 'HOME') }}/.ssh/config"
-target_host_ssh_common_args: ""
-target_host_remote_tmp: "/tmp/.ansible-{{ target_host_user }}/tmp"
 
-# Keycloak application settings
-keycloak_stack_state: present
-keycloak_project_dir: /opt/keycloak-postgres-docker
-keycloak_db_name: db_keycloak
-keycloak_db_user: postgres
+# Target server
+target_host_ip: 35.197.138.156
+target_host_user: github-actions
+
+# Leave both values empty only if you intentionally want plain HTTP by IP.
+keycloak_domain: keycloak.autonomous-istad.com
+letsencrypt_email: alexkgm2412@gmail.com
+
+# Core credentials
 keycloak_admin_user: admin
 keycloak_admin_password: "1234"
 keycloak_postgres_password: "1234"
-keycloak_http_port: 9090
-keycloak_provider_jar: "{{ playbook_dir }}/provider/keycloak-theme-for-kc-all-other-versions.jar"
-keycloak_theme_jar: ""
-keycloak_readiness_path: /realms/master/.well-known/openid-configuration
+
+# Main realm
 keycloak_realm_name: a8s
 keycloak_realm_display_name: A8S
-keycloak_realm_ssl_required: "{{ 'external' if (keycloak_domain | length > 0) else 'none' }}"
 keycloak_realm_login_theme: keycloakify-starter
-keycloak_debug_identity_providers: false
+
+
+# IMPORTANT: Replace social login secrets before using identity providers
 keycloak_identity_providers:
   - alias: github
     provider_id: github
@@ -76,6 +71,9 @@ keycloak_identity_providers:
     verify_essential_claim: false
     sync_mode: LEGACY
     case_sensitive_original_username: false
+
+
+# Realm bootstrap
 keycloak_realm_users:
   - username: a8s-admin
     first_name: A8S
@@ -88,6 +86,9 @@ keycloak_realm_users:
     client_roles:
       realm-management:
         - realm-admin
+
+
+# Client bootstrap
 keycloak_clients:
   - client_id: a8s-frontend
     name: a8s-frontend
@@ -142,17 +143,44 @@ keycloak_clients:
     oauth2_device_authorization_grant_enabled: false
     oidc_ciba_grant_enabled: false
 
-keycloak_domain: ""
-letsencrypt_email: ""
+
+# Deployment behavior
+keycloak_stack_state: present
+keycloak_debug_identity_providers: false
+keycloak_tls_expected_ips: []
+
+
+# Destroy behavior
 keycloak_destroy_remove_volumes: true
 keycloak_destroy_remove_project_dir: true
-keycloak_destroy_remove_tls_assets: false
+keycloak_destroy_remove_tls_assets: true
 keycloak_destroy_restore_default_nginx_site: true
 
-# Local generated secrets/cache
+
+# Advanced connection settings
+target_host_port: 22
+target_host_private_key_file: "{{ lookup('env', 'HOME') }}/.ssh/github-actions-key"
+target_host_ssh_config_file: "{{ lookup('env', 'HOME') }}/.ssh/config"
+target_host_ssh_common_args: ""
+target_host_remote_tmp: "/tmp/.ansible-{{ target_host_user }}/tmp"
+
+
+# Advanced Keycloak settings
+keycloak_project_dir: /opt/keycloak-postgres-docker
+keycloak_db_name: db_keycloak
+keycloak_db_user: postgres
+keycloak_http_port: 9090
+keycloak_provider_jar: "{{ playbook_dir }}/provider/keycloak-theme-for-kc-all-other-versions.jar"
+keycloak_theme_jar: ""
+keycloak_readiness_path: /realms/master/.well-known/openid-configuration
+keycloak_realm_ssl_required: "{{ 'external' if ((keycloak_domain | length > 0) and (letsencrypt_email | length > 0)) else 'none' }}"
+
+
+# Local generated files
 generated_secret_dir: "{{ playbook_dir }}/.ansible/generated"
 
-# OS packages
+
+# Package lists
 keycloak_os_packages:
   - ca-certificates
   - certbot
@@ -161,7 +189,6 @@ keycloak_os_packages:
   - nginx
   - python3-certbot-nginx
 
-# Docker packages
 docker_packages:
   - containerd.io
   - docker-buildx-plugin

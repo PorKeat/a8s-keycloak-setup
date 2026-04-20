@@ -1,4 +1,7 @@
 ---
+- name: Refresh the Keycloak admin token for realm user management
+  ansible.builtin.import_tasks: identity_auth.yml
+
 - name: Build the desired Keycloak realm user payload
   ansible.builtin.set_fact:
     keycloak_realm_user_payload: >-

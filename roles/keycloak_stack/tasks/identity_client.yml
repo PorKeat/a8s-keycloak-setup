@@ -1,4 +1,7 @@
 ---
+- name: Refresh the Keycloak admin token for client management
+  ansible.builtin.import_tasks: identity_auth.yml
+
 - name: Build the desired Keycloak client payload
   ansible.builtin.set_fact:
     keycloak_client_payload: >-

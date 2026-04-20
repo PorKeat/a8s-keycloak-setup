@@ -1,4 +1,7 @@
 ---
+- name: Refresh the Keycloak admin token for realm user role mapping
+  ansible.builtin.import_tasks: identity_auth.yml
+
 - name: Look up the Keycloak client for role assignment
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}/clients?clientId={{ keycloak_user_client_role_mapping.key | urlencode }}"

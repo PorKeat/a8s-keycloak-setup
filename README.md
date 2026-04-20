@@ -54,6 +54,7 @@ That same file also holds:
 - Keycloak admin username/password
 - Postgres password
 - domain and Let's Encrypt email
+- optional TLS expected public IP override
 - stack state and destroy behavior flags
 - realm and client bootstrap config
 - project directory
@@ -89,6 +90,8 @@ letsencrypt_email: you@example.com
 ```
 
 Then run `just deploy`.
+
+If Let's Encrypt fails, make sure the domain A record points to the public server IP that should answer on port `80`. By default the playbook expects `keycloak_domain` to resolve to `target_host_ip`. If your TLS traffic goes through a different public IP such as a load balancer, set `keycloak_tls_expected_ips` in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml).
 
 ## Realm Bootstrap
 

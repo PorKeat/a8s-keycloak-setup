@@ -5,6 +5,38 @@
   when: keycloak_enable_tls_effective | bool
   register: keycloak_existing_cert
 
+- name: Resolve the expected public IPs for TLS validation
+  ansible.builtin.set_fact:
+    keycloak_tls_expected_ips_effective: >-
+      {{
+        keycloak_tls_expected_ips
+        if (keycloak_tls_expected_ips | default([]) | length > 0)
+        else [keycloak_target_host_effective]
+      }}
+  when: keycloak_enable_tls_effective | bool
+
+- name: Resolve the configured Keycloak domain
+  ansible.builtin.command:
+    cmd: "getent ahostsv4 {{ keycloak_domain }}"
+  changed_when: false
+  when: keycloak_enable_tls_effective | bool
+  register: keycloak_domain_dns_lookup
+
+- name: Store the resolved IPv4 addresses for the Keycloak domain
+  ansible.builtin.set_fact:
+    keycloak_domain_resolved_ips: "{{ keycloak_domain_dns_lookup.stdout_lines | map('split') | map('first') | unique | list }}"
+  when: keycloak_enable_tls_effective | bool
+
+- name: Ensure the Keycloak domain points at the expected public IP before requesting TLS
+  ansible.builtin.assert:
+    that:
+      - "(keycloak_domain_resolved_ips | intersect(keycloak_tls_expected_ips_effective)) | length > 0"
+    fail_msg: >-
+      DNS for {{ keycloak_domain }} resolves to {{ keycloak_domain_resolved_ips | join(', ') }},
+      but the expected public IPs for TLS validation are {{ keycloak_tls_expected_ips_effective | join(', ') }}.
+      Update your DNS A record or set keycloak_tls_expected_ips in group_vars/all.yml if TLS should validate against a different public IP.
+  when: keycloak_enable_tls_effective | bool
+
 - name: Disable the default Nginx site
   ansible.builtin.file:
     path: /etc/nginx/sites-enabled/default

@@ -19,6 +19,21 @@ keycloak_realm_display_name: A8S
 keycloak_realm_login_theme: keycloakify-starter
 
 
+# Permanent server admin for the Keycloak master realm.
+# Log in with this user to avoid the temporary-admin warning banner.
+keycloak_master_realm_admin_users:
+  - username: kc-admin
+    first_name: Keycloak
+    last_name: Admin
+    email: admin@autonomous-istad.com
+    enabled: true
+    email_verified: true
+    password: "1234"
+    temporary_password: false
+    realm_roles:
+      - admin
+
+
 # IMPORTANT: Replace social login secrets before using identity providers
 keycloak_identity_providers:
   - alias: github

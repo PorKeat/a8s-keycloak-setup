@@ -80,6 +80,12 @@ just syntax
 
 `just destroy` runs the same playbook in destroy mode and removes the deployed Keycloak stack from the target host.
 
+For quick git pushes from this repo, you can also use:
+
+```bash
+./auto_push.sh "your commit message"
+```
+
 ## HTTPS
 
 Let's Encrypt does not issue certificates for a bare IP. For HTTPS, set these values in [group_vars/all.yml](/Users/alexkgm/keycloak-postgres-docker/group_vars/all.yml):

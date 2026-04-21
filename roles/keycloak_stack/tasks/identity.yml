@@ -19,6 +19,12 @@
 - name: Authenticate to the Keycloak admin API
   ansible.builtin.import_tasks: identity_auth.yml
 
+- name: Ensure the configured permanent master realm admin users exist
+  ansible.builtin.include_tasks: identity_master_admin.yml
+  loop: "{{ keycloak_master_realm_admin_users | default([]) }}"
+  loop_control:
+    loop_var: keycloak_master_admin_user
+
 - name: Check whether the target realm already exists
   ansible.builtin.uri:
     url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/{{ keycloak_realm_name }}"

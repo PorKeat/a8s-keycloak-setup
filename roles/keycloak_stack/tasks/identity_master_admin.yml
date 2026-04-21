@@ -1,0 +1,152 @@
+---
+- name: Refresh the Keycloak admin token for master realm admin management
+  ansible.builtin.import_tasks: identity_auth.yml
+
+- name: Build the desired master realm admin user payload
+  ansible.builtin.set_fact:
+    keycloak_master_admin_user_payload: >-
+      {{
+        {
+          'username': keycloak_master_admin_user.username,
+          'enabled': keycloak_master_admin_user.enabled | default(true) | bool,
+          'emailVerified': keycloak_master_admin_user.email_verified | default(false) | bool,
+          'firstName': keycloak_master_admin_user.first_name | default(''),
+          'lastName': keycloak_master_admin_user.last_name | default(''),
+          'email': keycloak_master_admin_user.email | default(''),
+          'attributes': keycloak_master_admin_user.attributes | default({}),
+          'requiredActions': keycloak_master_admin_user.required_actions | default([])
+        }
+      }}
+
+- name: Look up the existing master realm admin user
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/master/users?username={{ keycloak_master_admin_user.username | urlencode }}&exact=true"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_existing_master_admin_user
+
+- name: Store the current master realm admin user id when present
+  ansible.builtin.set_fact:
+    keycloak_existing_master_admin_user_id: "{{ (keycloak_existing_master_admin_user.json | first).id if (keycloak_existing_master_admin_user.json | length > 0) else '' }}"
+
+- name: Create the master realm admin user when missing
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/master/users"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body: "{{ keycloak_master_admin_user_payload }}"
+    status_code:
+      - 201
+      - 409
+    use_proxy: false
+  when: keycloak_existing_master_admin_user_id | length == 0
+
+- name: Refresh the master realm admin user id after creation
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/master/users?username={{ keycloak_master_admin_user.username | urlencode }}&exact=true"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_existing_master_admin_user_after_create
+  when: keycloak_existing_master_admin_user_id | length == 0
+
+- name: Resolve the final master realm admin user id
+  ansible.builtin.set_fact:
+    keycloak_final_master_admin_user_id: >-
+      {{
+        keycloak_existing_master_admin_user_id
+        if (keycloak_existing_master_admin_user_id | length > 0)
+        else ((keycloak_existing_master_admin_user_after_create.json | first).id if (keycloak_existing_master_admin_user_after_create.json | length > 0) else '')
+      }}
+
+- name: Update the master realm admin user configuration
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/master/users/{{ keycloak_final_master_admin_user_id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body: "{{ keycloak_master_admin_user_payload | combine({'id': keycloak_final_master_admin_user_id}) }}"
+    status_code: 204
+    use_proxy: false
+  when: keycloak_final_master_admin_user_id | length > 0
+
+- name: Set the master realm admin user password
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/master/users/{{ keycloak_final_master_admin_user_id }}/reset-password"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body:
+      type: password
+      temporary: "{{ keycloak_master_admin_user.temporary_password | default(false) | bool }}"
+      value: "{{ keycloak_master_admin_user.password }}"
+    status_code: 204
+    use_proxy: false
+  when:
+    - keycloak_final_master_admin_user_id | length > 0
+    - keycloak_master_admin_user.password is defined
+    - keycloak_master_admin_user.password | length > 0
+  no_log: true
+
+- name: Look up the master realm admin user's currently assigned realm roles
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/master/users/{{ keycloak_final_master_admin_user_id }}/role-mappings/realm"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  register: keycloak_assigned_master_admin_realm_roles
+  when: keycloak_final_master_admin_user_id | length > 0
+
+- name: Resolve which master realm roles are still missing
+  ansible.builtin.set_fact:
+    keycloak_missing_master_admin_realm_roles: >-
+      {{
+        (keycloak_master_admin_user.realm_roles | default([]))
+        | difference(keycloak_assigned_master_admin_realm_roles.json | map(attribute='name') | list)
+      }}
+  when: keycloak_final_master_admin_user_id | length > 0
+
+- name: Look up the missing master realm role representations
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/master/roles/{{ keycloak_missing_master_admin_realm_role_name | urlencode }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    return_content: true
+    status_code: 200
+    use_proxy: false
+  loop: "{{ keycloak_missing_master_admin_realm_roles }}"
+  loop_control:
+    loop_var: keycloak_missing_master_admin_realm_role_name
+  register: keycloak_missing_master_admin_realm_role_representations
+  when:
+    - keycloak_final_master_admin_user_id | length > 0
+    - keycloak_missing_master_admin_realm_roles | length > 0
+
+- name: Assign the missing master realm roles to the master realm admin user
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ keycloak_http_port }}/admin/realms/master/users/{{ keycloak_final_master_admin_user_id }}/role-mappings/realm"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ keycloak_admin_access_token }}"
+    body_format: json
+    body: "{{ keycloak_missing_master_admin_realm_role_representations.results | map(attribute='json') | list }}"
+    status_code: 204
+    use_proxy: false
+  when:
+    - keycloak_final_master_admin_user_id | length > 0
+    - keycloak_missing_master_admin_realm_roles | length > 0

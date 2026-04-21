@@ -4,6 +4,7 @@
     msg:
       - "Access URL: {{ ('https://' ~ keycloak_domain) if ((keycloak_enable_tls_effective | bool) and (keycloak_tls_cert.stat.exists | default(false))) else ('http://' ~ keycloak_target_host_effective) }}"
       - "Admin username: {{ keycloak_admin_user_effective }}"
+      - "Permanent master admins: {{ keycloak_master_realm_admin_users | default([]) | map(attribute='username') | list | join(', ') }}"
       - "Realm: {{ keycloak_realm_name }}"
       - "Login theme: {{ keycloak_realm_login_theme_effective if (keycloak_realm_login_theme_effective | length > 0) else 'default' }}"
       - "Realm users: {{ keycloak_realm_users | default([]) | map(attribute='username') | list | join(', ') }}"

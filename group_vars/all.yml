@@ -18,6 +18,24 @@ keycloak_realm_name: a8s
 keycloak_realm_display_name: A8S
 keycloak_realm_login_theme: keycloakify-starter
 
+# Realm email / SMTP
+# For Gmail, use an App Password here, not your normal account password.
+keycloak_realm_smtp:
+  enabled: true
+  from: autonomous.istad@gmail.com
+  from_display_name: Autonomous
+  reply_to: ""
+  reply_to_display_name: ""
+  envelope_from: ""
+  host: smtp.gmail.com
+  port: "587"
+  ssl: false
+  starttls: true
+  auth: true
+  user: autonomous.istad@gmail.com
+  password: 12345678
+  debug: false
+
 
 # Permanent server admin for the Keycloak master realm.
 # Log in with this user to avoid the temporary-admin warning banner.

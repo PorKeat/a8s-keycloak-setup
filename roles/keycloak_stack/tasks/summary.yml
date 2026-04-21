@@ -7,6 +7,7 @@
       - "Permanent master admins: {{ keycloak_master_realm_admin_users | default([]) | map(attribute='username') | list | join(', ') }}"
       - "Realm: {{ keycloak_realm_name }}"
       - "Login theme: {{ keycloak_realm_login_theme_effective if (keycloak_realm_login_theme_effective | length > 0) else 'default' }}"
+      - "SMTP: {{ (keycloak_realm_smtp.from | default('disabled')) ~ ' via ' ~ (keycloak_realm_smtp.host | default('')) if (keycloak_realm_smtp.enabled | default(false) | bool) else 'disabled' }}"
       - "Realm users: {{ keycloak_realm_users | default([]) | map(attribute='username') | list | join(', ') }}"
       - "Identity providers: {{ keycloak_identity_providers | default([]) | map(attribute='alias') | list | join(', ') }}"
       - "Clients: {{ keycloak_clients | map(attribute='client_id') | list | join(', ') }}"

@@ -1,4 +1,25 @@
 ---
+- name: Build the desired Keycloak realm SMTP payload
+  ansible.builtin.set_fact:
+    keycloak_realm_smtp_payload: >-
+      {{
+        {}
+        | combine({'from': keycloak_realm_smtp.from} if (keycloak_realm_smtp.from | default('') | length > 0) else {})
+        | combine({'fromDisplayName': keycloak_realm_smtp.from_display_name} if (keycloak_realm_smtp.from_display_name | default('') | length > 0) else {})
+        | combine({'replyTo': keycloak_realm_smtp.reply_to} if (keycloak_realm_smtp.reply_to | default('') | length > 0) else {})
+        | combine({'replyToDisplayName': keycloak_realm_smtp.reply_to_display_name} if (keycloak_realm_smtp.reply_to_display_name | default('') | length > 0) else {})
+        | combine({'envelopeFrom': keycloak_realm_smtp.envelope_from} if (keycloak_realm_smtp.envelope_from | default('') | length > 0) else {})
+        | combine({'host': keycloak_realm_smtp.host} if (keycloak_realm_smtp.host | default('') | length > 0) else {})
+        | combine({'port': keycloak_realm_smtp.port | string} if (keycloak_realm_smtp.port is defined) else {})
+        | combine({'ssl': ((keycloak_realm_smtp.ssl | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'starttls': ((keycloak_realm_smtp.starttls | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'auth': ((keycloak_realm_smtp.auth | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'user': keycloak_realm_smtp.user} if (keycloak_realm_smtp.user | default('') | length > 0) else {})
+        | combine({'password': keycloak_realm_smtp.password} if (keycloak_realm_smtp.password | default('') | length > 0) else {})
+        | combine({'debug': ((keycloak_realm_smtp.debug | default(false) | bool) | ternary('true', 'false'))})
+      }}
+  no_log: true
+
 - name: Build the desired Keycloak realm payload
   ansible.builtin.set_fact:
     keycloak_realm_payload: >-
@@ -14,7 +35,13 @@
             if (keycloak_realm_login_theme_effective | length > 0)
             else {}
           )
+        | combine(
+            {'smtpServer': keycloak_realm_smtp_payload}
+            if (keycloak_realm_smtp.enabled | default(false) | bool)
+            else {}
+          )
       }}
+  no_log: true
 
 - name: Authenticate to the Keycloak admin API
   ansible.builtin.import_tasks: identity_auth.yml
@@ -52,6 +79,7 @@
       - 409
     use_proxy: false
   when: keycloak_target_realm.status == 404
+  no_log: true
 
 - name: Update the target realm configuration
   ansible.builtin.uri:
@@ -63,6 +91,7 @@
     body: "{{ keycloak_realm_payload }}"
     status_code: 204
     use_proxy: false
+  no_log: true
 
 - name: Ensure the configured realm users exist
   ansible.builtin.include_tasks: identity_user.yml

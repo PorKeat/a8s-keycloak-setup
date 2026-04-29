@@ -1,3 +1,13 @@
+upstream keycloak_upstream {
+{% if keycloak_enable_sticky_sessions | default(true) %}
+    ip_hash;
+{% endif %}
+{% for replica_port in keycloak_replica_ports %}
+    server 127.0.0.1:{{ replica_port }};
+{% endfor %}
+    keepalive 32;
+}
+
 {% if keycloak_tls_ready | default(false) %}
 server {
     listen 80;
@@ -14,7 +24,7 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
 
     location / {
-        proxy_pass http://127.0.0.1:{{ keycloak_http_port }};
+        proxy_pass http://keycloak_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -35,7 +45,7 @@ server {
     server_name {{ keycloak_server_name_effective }};
 
     location / {
-        proxy_pass http://127.0.0.1:{{ keycloak_http_port }};
+        proxy_pass http://keycloak_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

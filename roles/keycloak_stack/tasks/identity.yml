@@ -3,20 +3,30 @@
   ansible.builtin.set_fact:
     keycloak_realm_smtp_payload: >-
       {{
+        {
+          'ssl': ((keycloak_realm_smtp.ssl | default(false) | bool) | ternary('true', 'false')),
+          'starttls': ((keycloak_realm_smtp.starttls | default(false) | bool) | ternary('true', 'false')),
+          'auth': ((keycloak_realm_smtp.auth | default(false) | bool) | ternary('true', 'false')),
+          'debug': ((keycloak_realm_smtp.debug | default(false) | bool) | ternary('true', 'false'))
+        }
+        | combine({'from': keycloak_realm_smtp.from | string} if ((keycloak_realm_smtp.from | default('') | string) | length > 0) else {})
+        | combine({'fromDisplayName': keycloak_realm_smtp.from_display_name | string} if ((keycloak_realm_smtp.from_display_name | default('') | string) | length > 0) else {})
+        | combine({'replyTo': keycloak_realm_smtp.reply_to | string} if ((keycloak_realm_smtp.reply_to | default('') | string) | length > 0) else {})
+        | combine({'replyToDisplayName': keycloak_realm_smtp.reply_to_display_name | string} if ((keycloak_realm_smtp.reply_to_display_name | default('') | string) | length > 0) else {})
+        | combine({'envelopeFrom': keycloak_realm_smtp.envelope_from | string} if ((keycloak_realm_smtp.envelope_from | default('') | string) | length > 0) else {})
+        | combine({'host': keycloak_realm_smtp.host | string} if ((keycloak_realm_smtp.host | default('') | string) | length > 0) else {})
+        | combine({'port': keycloak_realm_smtp.port | string} if (keycloak_realm_smtp.port is defined and ((keycloak_realm_smtp.port | string) | length > 0)) else {})
+        | combine({'user': keycloak_realm_smtp.user | string} if ((keycloak_realm_smtp.user | default('') | string) | length > 0) else {})
+        | combine({'password': keycloak_realm_smtp.password | string} if ((keycloak_realm_smtp.password | default('') | string) | length > 0) else {})
+      }}
+  no_log: true
+
+- name: Build the desired Keycloak realm attributes payload
+  ansible.builtin.set_fact:
+    keycloak_realm_attributes_payload: >-
+      {{
         {}
-        | combine({'from': keycloak_realm_smtp.from} if (keycloak_realm_smtp.from | default('') | length > 0) else {})
-        | combine({'fromDisplayName': keycloak_realm_smtp.from_display_name} if (keycloak_realm_smtp.from_display_name | default('') | length > 0) else {})
-        | combine({'replyTo': keycloak_realm_smtp.reply_to} if (keycloak_realm_smtp.reply_to | default('') | length > 0) else {})
-        | combine({'replyToDisplayName': keycloak_realm_smtp.reply_to_display_name} if (keycloak_realm_smtp.reply_to_display_name | default('') | length > 0) else {})
-        | combine({'envelopeFrom': keycloak_realm_smtp.envelope_from} if (keycloak_realm_smtp.envelope_from | default('') | length > 0) else {})
-        | combine({'host': keycloak_realm_smtp.host} if (keycloak_realm_smtp.host | default('') | length > 0) else {})
-        | combine({'port': keycloak_realm_smtp.port | string} if (keycloak_realm_smtp.port is defined) else {})
-        | combine({'ssl': ((keycloak_realm_smtp.ssl | default(false) | bool) | ternary('true', 'false'))})
-        | combine({'starttls': ((keycloak_realm_smtp.starttls | default(false) | bool) | ternary('true', 'false'))})
-        | combine({'auth': ((keycloak_realm_smtp.auth | default(false) | bool) | ternary('true', 'false'))})
-        | combine({'user': keycloak_realm_smtp.user} if (keycloak_realm_smtp.user | default('') | length > 0) else {})
-        | combine({'password': keycloak_realm_smtp.password} if (keycloak_realm_smtp.password | default('') | length > 0) else {})
-        | combine({'debug': ((keycloak_realm_smtp.debug | default(false) | bool) | ternary('true', 'false'))})
+        | combine({'parRequestUriLifespan': (keycloak_realm_token_settings.par_request_uri_lifespan | string)} if (keycloak_realm_token_settings.par_request_uri_lifespan is defined and ((keycloak_realm_token_settings.par_request_uri_lifespan | string) | length > 0)) else {})
       }}
   no_log: true
 
@@ -28,7 +38,33 @@
           'realm': keycloak_realm_name,
           'enabled': true,
           'displayName': keycloak_realm_display_name,
-          'sslRequired': keycloak_realm_ssl_required
+          'sslRequired': keycloak_realm_ssl_required,
+          'registrationAllowed': keycloak_realm_login_settings.registration_allowed | bool,
+          'resetPasswordAllowed': keycloak_realm_login_settings.reset_password_allowed | bool,
+          'rememberMe': keycloak_realm_login_settings.remember_me | bool,
+          'registrationEmailAsUsername': keycloak_realm_login_settings.registration_email_as_username | bool,
+          'loginWithEmailAllowed': keycloak_realm_login_settings.login_with_email_allowed | bool,
+          'duplicateEmailsAllowed': keycloak_realm_login_settings.duplicate_emails_allowed | bool,
+          'verifyEmail': keycloak_realm_login_settings.verify_email | bool,
+          'editUsernameAllowed': keycloak_realm_login_settings.edit_username_allowed | bool,
+          'defaultSignatureAlgorithm': keycloak_realm_token_settings.default_signature_algorithm,
+          'revokeRefreshToken': keycloak_realm_token_settings.revoke_refresh_token | bool,
+          'refreshTokenMaxReuse': keycloak_realm_token_settings.refresh_token_max_reuse | int,
+          'accessTokenLifespan': keycloak_realm_token_settings.access_token_lifespan | int,
+          'accessTokenLifespanForImplicitFlow': keycloak_realm_token_settings.access_token_lifespan_for_implicit_flow | int,
+          'ssoSessionIdleTimeout': keycloak_realm_session_settings.sso_session_idle_timeout | int,
+          'ssoSessionMaxLifespan': keycloak_realm_session_settings.sso_session_max_lifespan | int,
+          'clientSessionIdleTimeout': keycloak_realm_session_settings.client_session_idle_timeout | int,
+          'clientSessionMaxLifespan': keycloak_realm_session_settings.client_session_max_lifespan | int,
+          'offlineSessionIdleTimeout': keycloak_realm_session_settings.offline_session_idle_timeout | int,
+          'offlineSessionMaxLifespanEnabled': keycloak_realm_session_settings.offline_session_max_lifespan_enabled | bool,
+          'accessCodeLifespan': keycloak_realm_session_settings.login_timeout | int,
+          'accessCodeLifespanUserAction': keycloak_realm_session_settings.login_action_timeout | int,
+          'accessCodeLifespanLogin': keycloak_realm_token_settings.client_login_timeout | int,
+          'actionTokenGeneratedByUserLifespan': keycloak_realm_token_settings.user_initiated_action_lifespan | int,
+          'actionTokenGeneratedByAdminLifespan': keycloak_realm_token_settings.admin_initiated_action_lifespan | int,
+          'oauth2DeviceCodeLifespan': keycloak_realm_token_settings.oauth2_device_code_lifespan | int,
+          'oauth2DevicePollingInterval': keycloak_realm_token_settings.oauth2_device_polling_interval | int
         }
         | combine(
             {'loginTheme': keycloak_realm_login_theme_effective}
@@ -36,8 +72,28 @@
             else {}
           )
         | combine(
+            {'ssoSessionIdleTimeoutRememberMe': (keycloak_realm_session_settings.sso_session_idle_timeout_remember_me | int)}
+            if ((keycloak_realm_session_settings.sso_session_idle_timeout_remember_me | default('') | string) | length > 0)
+            else {}
+          )
+        | combine(
+            {'ssoSessionMaxLifespanRememberMe': (keycloak_realm_session_settings.sso_session_max_lifespan_remember_me | int)}
+            if ((keycloak_realm_session_settings.sso_session_max_lifespan_remember_me | default('') | string) | length > 0)
+            else {}
+          )
+        | combine(
+            {'offlineSessionMaxLifespan': (keycloak_realm_session_settings.offline_session_max_lifespan | int)}
+            if ((keycloak_realm_session_settings.offline_session_max_lifespan | default('') | string) | length > 0)
+            else {}
+          )
+        | combine(
             {'smtpServer': keycloak_realm_smtp_payload}
             if (keycloak_realm_smtp.enabled | default(false) | bool)
+            else {}
+          )
+        | combine(
+            {'attributes': keycloak_realm_attributes_payload}
+            if (keycloak_realm_attributes_payload | length > 0)
             else {}
           )
       }}

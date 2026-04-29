@@ -100,29 +100,33 @@
 
 - name: Start or update the Docker Compose stack
   ansible.builtin.command:
-    cmd: docker compose up -d
+    cmd: docker compose up -d --remove-orphans
   args:
     chdir: "{{ keycloak_project_dir }}"
   register: keycloak_compose_up
   changed_when: >
     'Creating' in keycloak_compose_up.stdout or
     'Recreating' in keycloak_compose_up.stdout or
-    'Starting' in keycloak_compose_up.stdout
+    'Starting' in keycloak_compose_up.stdout or
+    'Removing' in keycloak_compose_up.stdout
 
 - name: Wait for Keycloak to become reachable and ready
   block:
-    - name: Wait for the Keycloak port to accept connections
+    - name: Wait for each Keycloak replica port to accept connections
       ansible.builtin.wait_for:
         host: 127.0.0.1
-        port: "{{ keycloak_http_port }}"
+        port: "{{ keycloak_replica_port }}"
         connect_timeout: 5
         delay: 2
         sleep: 3
         timeout: 180
+      loop: "{{ keycloak_replica_ports }}"
+      loop_control:
+        loop_var: keycloak_replica_port
 
-    - name: Wait for the Keycloak readiness endpoint
+    - name: Wait for each Keycloak replica readiness endpoint
       ansible.builtin.uri:
-        url: "http://127.0.0.1:{{ keycloak_http_port }}{{ keycloak_readiness_path }}"
+        url: "http://127.0.0.1:{{ keycloak_replica_port }}{{ keycloak_readiness_path }}"
         method: GET
         status_code: 200
         use_proxy: false
@@ -131,6 +135,9 @@
       delay: 5
       until: keycloak_healthcheck.status == 200
       changed_when: false
+      loop: "{{ keycloak_replica_ports }}"
+      loop_control:
+        loop_var: keycloak_replica_port
 
   rescue:
     - name: Capture Docker Compose service status
@@ -144,7 +151,7 @@
 
     - name: Capture recent Docker Compose logs
       ansible.builtin.command:
-        cmd: docker compose logs --tail=200 db keycloak
+        cmd: docker compose logs --tail=200
       args:
         chdir: "{{ keycloak_project_dir }}"
       register: keycloak_compose_logs
@@ -161,29 +168,35 @@
 
     - name: Fail when Keycloak did not become ready
       ansible.builtin.fail:
-        msg: "Keycloak did not become ready on http://127.0.0.1:{{ keycloak_http_port }}{{ keycloak_readiness_path }}. Review the Docker Compose logs above."
+        msg: "Not all Keycloak replicas became ready on ports {{ keycloak_replica_ports | join(', ') }}. Review the Docker Compose logs above."
 
-- name: Build Keycloak after provider updates
+- name: Build each Keycloak replica after provider updates
   ansible.builtin.command:
-    cmd: docker compose exec -T keycloak /opt/keycloak/bin/kc.sh build
+    cmd: "docker compose exec -T {{ keycloak_replica_service_name }} /opt/keycloak/bin/kc.sh build"
   args:
     chdir: "{{ keycloak_project_dir }}"
   register: keycloak_build
   retries: 5
   delay: 10
   until: keycloak_build.rc == 0
+  loop: "{{ keycloak_replica_service_names }}"
+  loop_control:
+    loop_var: keycloak_replica_service_name
   when: keycloak_provider_rebuild_required | bool
 
-- name: Restart Keycloak after rebuilding providers
+- name: Restart each Keycloak replica after rebuilding providers
   ansible.builtin.command:
-    cmd: docker compose restart keycloak
+    cmd: "docker compose restart {{ keycloak_replica_service_name }}"
   args:
     chdir: "{{ keycloak_project_dir }}"
+  loop: "{{ keycloak_replica_service_names }}"
+  loop_control:
+    loop_var: keycloak_replica_service_name
   when: keycloak_provider_rebuild_required | bool
 
-- name: Wait for Keycloak to become ready after provider rebuild
+- name: Wait for each Keycloak replica to become ready after provider rebuild
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ keycloak_http_port }}{{ keycloak_readiness_path }}"
+    url: "http://127.0.0.1:{{ keycloak_replica_port }}{{ keycloak_readiness_path }}"
     method: GET
     status_code: 200
     use_proxy: false
@@ -192,4 +205,7 @@
   delay: 5
   until: keycloak_rebuild_healthcheck.status == 200
   changed_when: false
+  loop: "{{ keycloak_replica_ports }}"
+  loop_control:
+    loop_var: keycloak_replica_port
   when: keycloak_provider_rebuild_required | bool

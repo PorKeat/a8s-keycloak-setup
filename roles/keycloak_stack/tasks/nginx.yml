@@ -34,7 +34,7 @@
     fail_msg: >-
       DNS for {{ keycloak_domain }} resolves to {{ keycloak_domain_resolved_ips | join(', ') }},
       but the expected public IPs for TLS validation are {{ keycloak_tls_expected_ips_effective | join(', ') }}.
-      Update your DNS A record or set keycloak_tls_expected_ips in group_vars/all.yml if TLS should validate against a different public IP.
+      Update your DNS A record or set keycloak_tls_expected_ips in group_vars/all.local.yml if TLS should validate against a different public IP.
   when: keycloak_enable_tls_effective | bool
 
 - name: Disable the default Nginx site

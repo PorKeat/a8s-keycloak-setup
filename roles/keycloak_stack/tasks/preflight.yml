@@ -30,6 +30,9 @@
         else (keycloak_theme_jar | default('', true))
       }}
     keycloak_realm_login_theme_effective: "{{ keycloak_realm_login_theme | default('', true) }}"
+    keycloak_replica_count_effective: "{{ keycloak_replica_count | default(1) | int }}"
+    keycloak_replica_ports: "{{ range((keycloak_http_port | int), (keycloak_http_port | int) + (keycloak_replica_count | default(1) | int)) | list }}"
+    keycloak_replica_service_names: "{{ range(1, (keycloak_replica_count | default(1) | int) + 1) | map('string') | map('regex_replace', '^(.*)$', 'keycloak-\\1') | list }}"
 
 - name: Use the provided Postgres password
   ansible.builtin.set_fact:

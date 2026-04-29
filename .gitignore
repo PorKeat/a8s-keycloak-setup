@@ -1,3 +1,6 @@
 secrets/
 keycloak/
 .ansible/
+group_vars/all.yml
+group_vars/all.local.yml
+!group_vars/all.example.yml

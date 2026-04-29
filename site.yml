@@ -4,14 +4,14 @@
   gather_facts: false
   connection: local
   vars_files:
-    - group_vars/all.yml
+    - group_vars/all.local.yml
 
   tasks:
     - name: Ensure the target host IP is configured
       ansible.builtin.assert:
         that:
           - target_host_ip | length > 0
-        fail_msg: Set target_host_ip in group_vars/all.yml before running the playbook.
+        fail_msg: Set target_host_ip in group_vars/all.local.yml before running the playbook.
 
     - name: Check whether the configured SSH private key exists
       ansible.builtin.stat:
@@ -66,7 +66,7 @@
   gather_facts: false
   become: false
   vars_files:
-    - group_vars/all.yml
+    - group_vars/all.local.yml
 
   tasks:
     - name: Ensure the remote Ansible temp directory exists for the SSH user
@@ -78,7 +78,7 @@
   become: true
   gather_facts: true
   vars_files:
-    - group_vars/all.yml
+    - group_vars/all.local.yml
 
   roles:
     - role: keycloak_stack

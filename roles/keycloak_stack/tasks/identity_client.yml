@@ -36,7 +36,16 @@
             'oidc.ciba.grant.enabled': ((keycloak_client.oidc_ciba_grant_enabled | default(false) | bool) | ternary('true', 'false'))
           }
         }
+        | combine(
+            {'secret': keycloak_client.client_secret | string}
+            if (
+              not (keycloak_client.public_client | default(true) | bool)
+              and ((keycloak_client.client_secret | default('') | string) | length > 0)
+            )
+            else {}
+          )
       }}
+  no_log: "{{ not (keycloak_debug_clients | default(false) | bool) }}"
 
 - name: Look up the existing Keycloak client
   ansible.builtin.uri:
@@ -66,6 +75,7 @@
       - 409
     use_proxy: false
   when: keycloak_existing_client_id | length == 0
+  no_log: "{{ not (keycloak_debug_clients | default(false) | bool) }}"
 
 - name: Refresh the Keycloak client id after creation
   ansible.builtin.uri:
@@ -99,3 +109,4 @@
     status_code: 204
     use_proxy: false
   when: keycloak_final_client_id | length > 0
+  no_log: "{{ not (keycloak_debug_clients | default(false) | bool) }}"

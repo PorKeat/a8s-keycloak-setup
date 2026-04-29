@@ -16,9 +16,10 @@ services:
     secrets:
       - postgres_password
 
-  keycloak:
+{% for replica_index in range(1, (keycloak_replica_count_effective | int) + 1) %}
+  keycloak-{{ replica_index }}:
     image: quay.io/keycloak/keycloak:26.3.1
-    container_name: keycloak
+    container_name: keycloak-{{ replica_index }}
     restart: unless-stopped
     depends_on:
       - db
@@ -30,14 +31,19 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
       KC_HOSTNAME: ${KC_HOSTNAME}
+      KC_CACHE: {{ keycloak_cache_mode }}
+{% if keycloak_cache_stack | default('') | length > 0 %}
+      KC_CACHE_STACK: {{ keycloak_cache_stack }}
+{% endif %}
       KC_PROXY: edge
       KC_PROXY_HEADERS: xforwarded
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HEALTH_ENABLED: "true"
       KC_HTTP_ENABLED: "true"
+      KC_NODE_NAME: keycloak-{{ replica_index }}
     ports:
-      - "{{ keycloak_http_port }}:8080"
+      - "127.0.0.1:{{ (keycloak_http_port | int) + replica_index - 1 }}:8080"
     volumes:
       - ./keycloak/themes:/opt/keycloak/themes
       - ./keycloak/providers:/opt/keycloak/providers
@@ -49,6 +55,7 @@ services:
       - kc_admin_password
     command:
       - start
+{% endfor %}
 
 volumes:
   postgres_data:
